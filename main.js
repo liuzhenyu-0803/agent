@@ -13,6 +13,7 @@ function createWindow() {
     height: 800,
     minWidth: 800,
     minHeight: 600,
+    autoHideMenuBar: true, // 自动隐藏菜单栏
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: true,
@@ -27,7 +28,8 @@ function createWindow() {
   // 在开发环境中加载 Vite 开发服务器
   if (isDev) {
     win.loadURL('http://localhost:5173')
-    win.webContents.openDevTools()
+    // 只在用户手动打开时显示开发者工具
+    // win.webContents.openDevTools()
   } else {
     win.loadFile('dist/index.html')
   }

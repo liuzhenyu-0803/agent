@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { apiService } from '../services/api'
 
 function Settings({ onClose }) {
@@ -77,66 +77,97 @@ function Settings({ onClose }) {
     }
   }
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-96">
-        <h2 className="text-xl font-bold mb-4">设置</h2>
-        
-        {error && (
-          <div className="mb-4 p-2 bg-red-100 text-red-700 rounded">
-            {error}
-          </div>
-        )}
+  const [isOpen, setIsOpen] = useState(false)
+  const dropdownRef = useRef(null)
 
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-1">
-            OpenRouter API Key
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  return (
+    <div className="settings-panel">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-semibold text-gray-200">设置</h2>
+        <button
+          onClick={onClose}
+          className="p-2 rounded-lg text-gray-400 hover:text-gray-300 hover:bg-zinc-700/80 transition-all duration-200"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      {error && (
+        <div className="mb-4 p-3 bg-red-500/10 text-red-400 rounded-lg">
+          {error}
+        </div>
+      )}
+
+      <div className="space-y-6">
+        {/* API Key 输入框 */}
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-1.5">
+            API Key
           </label>
           <input
             type="password"
             value={apiKey}
-            onChange={handleApiKeyChange}
-            className="w-full p-2 border rounded focus:outline-none focus:border-primary"
+            onChange={(e) => setApiKey(e.target.value)}
+            className="w-full bg-zinc-800/50 text-gray-200 border border-zinc-700 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-zinc-600 transition-all duration-200"
             placeholder="输入你的 API Key"
           />
         </div>
 
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-1">
+        {/* 模型选择 */}
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-1.5">
             选择模型
           </label>
-          {isLoading ? (
-            <div className="text-center p-2">加载中...</div>
-          ) : (
-            <select
-              value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
-              className="w-full p-2 border rounded focus:outline-none focus:border-primary"
-              disabled={!apiKey || models.length === 0}
-            >
-              <option value="">选择一个模型</option>
-              {models.map(model => (
-                <option key={model.id} value={model.id}>
-                  {model.name || model.id}
-                </option>
-              ))}
-            </select>
-          )}
+          <select
+            value={selectedModel}
+            onChange={(e) => setSelectedModel(e.target.value)}
+            className="w-full bg-zinc-800/50 text-gray-200 border border-zinc-700 rounded-xl px-4 pr-10 py-2.5 focus:outline-none focus:ring-2 focus:ring-zinc-600 transition-all duration-200 appearance-none bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIiIGhlaWdodD0iOCIgdmlld0JveD0iMCAwIDEyIDgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ik0xIDFMNiA2TDExIDEiIHN0cm9rZT0iIzZCNzI4MCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KPC9zdmc+')] bg-no-repeat bg-[center_right_1rem]"
+          >
+            <option value="">选择模型</option>
+            {models.map(model => (
+              <option 
+                key={model.id} 
+                value={model.id}
+              >
+                {model.id}
+              </option>
+            ))}
+          </select>
         </div>
 
-        <div className="flex justify-end space-x-2">
+        {/* 保存按钮 */}
+        <div className="flex justify-end gap-3 mt-6">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-gray-600 hover:text-gray-800"
+            className="px-4 py-2 bg-zinc-800/80 hover:bg-zinc-700 text-gray-300 rounded-xl transition-all duration-200 transform hover:scale-105"
           >
             取消
           </button>
           <button
             onClick={handleSave}
-            disabled={!apiKey || !selectedModel}
-            className="px-4 py-2 bg-primary text-white rounded hover:bg-blue-600 disabled:bg-gray-400"
+            disabled={isLoading}
+            className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-gray-200 rounded-xl transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center gap-2"
           >
-            保存
+            {isLoading ? (
+              <>
+                <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                保存中...
+              </>
+            ) : (
+              '保存'
+            )}
           </button>
         </div>
       </div>
