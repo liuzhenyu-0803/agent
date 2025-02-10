@@ -13,21 +13,18 @@
   },
   "dependencies": {
     "electron-store": "^8.1.0",
-    "highlight.js": "^11.11.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-markdown": "^8.0.7",
     "react-split": "^2.0.14",
+    "react-syntax-highlighter": "^15.6.1",
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^3.0.1",
-    "unified": "^10.1.2",
     "remark-parse": "^10.0.2",
     "remark-rehype": "^10.1.0",
-    "uuid": "^9.0.0"
+    "unified": "^10.1.2"
   },
   "devDependencies": {
-    "@types/react": "^18.2.15",
-    "@types/react-dom": "^18.2.7",
     "@vitejs/plugin-react": "^4.0.3",
     "concurrently": "^8.2.0",
     "electron": "^25.3.1",
