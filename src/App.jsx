@@ -1,32 +1,71 @@
+// React 核心库
+// useState: 用于在函数组件中添加状态管理
+// useEffect: 用于处理组件生命周期和副作用操作
 import React, { useState, useEffect } from 'react'
+
+// 可拖动分屏组件，用于创建灵活的布局
+// 允许用户通过拖动调整左右两侧面板的宽度比例
 import Split from 'react-split'
+
+// 消息展示组件，负责渲染聊天消息列表
+// 处理消息的展示、格式化和交互
 import MessageContent from './components/MessageContent'
+
+// 设置弹窗组件，用于配置应用程序设置
+// 包括 API Key、模型选择等关键配置
 import Settings from './components/Settings'
+
+// API 服务模块，封装了与 AI 服务交互的核心逻辑
+// 提供消息发送、流式响应等功能
 import { apiService } from './services/api'
+
+// 分屏组件的样式文件
+// 定义分屏组件的基础样式和交互效果
 import './split.css'
 
+// 主应用组件：AI 聊天应用的核心功能实现
 function App() {
+  // 状态管理：定义组件所需的各种状态
+  // 聊天列表：所有聊天会话
   const [chats, setChats] = useState([])
+  
+  // 当前选中的聊天会话
   const [selectedChat, setSelectedChat] = useState(null)
+  
+  // 用户输入消息
   const [inputMessage, setInputMessage] = useState('')
+  
+  // 消息发送/接收的加载状态
   const [isLoading, setIsLoading] = useState(false)
+  
+  // 控制设置弹窗的显示
   const [showSettings, setShowSettings] = useState(false)
+  
+  // 错误信息管理
   const [error, setError] = useState(null)
+  
+  // 应用初始化状态
   const [isInitialized, setIsInitialized] = useState(false)
+  
+  // 可拖动分屏的尺寸（持久化保存）
   const [sizes, setSizes] = useState(() => {
+    // 从本地存储读取上次保存的分屏尺寸
     const savedSizes = localStorage.getItem('split-sizes')
     return savedSizes ? JSON.parse(savedSizes) : [25, 75]
   })
+  
+  // 控制聊天列表的显示/隐藏
   const [showChatList, setShowChatList] = useState(true)
 
-  // 加载设置和会话
+  // 应用初始化：加载设置和历史聊天
   useEffect(() => {
     const initialize = async () => {
       try {
-        // 加载设置
+        // 加载应用设置
         const settings = await window.electronAPI.store.get('settings')
         console.log('Loaded settings:', settings)
         
+        // 设置 API Key 和模型
         if (settings?.apiKey) {
           apiService.setApiKey(settings.apiKey)
         }
@@ -34,12 +73,12 @@ function App() {
           apiService.setModel(settings.selectedModel)
         }
 
-        // 如果没有设置 API Key 或 Model，显示设置对话框
+        // 如果没有配置 API Key 或模型，显示设置弹窗
         if (!settings?.apiKey || !settings?.selectedModel) {
           setShowSettings(true)
         }
 
-        // 加载会话
+        // 加载历史聊天记录
         const allChats = await window.electronAPI.store.get('chats')
         console.log('Loaded chats:', allChats)
         setChats(allChats || [])
@@ -52,7 +91,7 @@ function App() {
     initialize()
   }, [])
 
-  // 创建新会话
+  // 创建新的聊天会话
   const handleNewChat = async () => {
     try {
       // 检查是否已设置 API
@@ -63,6 +102,7 @@ function App() {
         return
       }
 
+      // 创建新聊天会话的数据结构
       const newChat = {
         id: Math.random().toString(36).substring(2) + Date.now().toString(36),
         title: '新的会话',
@@ -71,6 +111,7 @@ function App() {
         updatedAt: new Date().toISOString()
       }
 
+      // 更新聊天列表并保存
       const updatedChats = [newChat, ...chats]
       await window.electronAPI.store.set('chats', updatedChats)
       setChats(updatedChats)
@@ -82,7 +123,7 @@ function App() {
     }
   }
 
-  // 删除会话
+  // 删除指定的聊天会话
   const handleDeleteChat = async (chatId, e) => {
     try {
       e.stopPropagation()
@@ -99,10 +140,12 @@ function App() {
     }
   }
 
-  // 发送消息
+  // 发送消息的核心处理逻辑
   const handleSendMessage = async () => {
+    // 防止发送空消息
     if (!inputMessage.trim()) return;
 
+    // 构造用户消息对象
     const userMessage = {
       id: Date.now(),
       role: 'user',
@@ -239,38 +282,7 @@ function App() {
     }
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      if (inputMessage.trim()) {
-        handleSendMessage();
-      }
-    }
-  };
-
-  // 处理设置关闭
-  const handleSettingsClose = () => {
-    // 如果是首次设置，检查是否已配置
-    if (!isInitialized) {
-      const checkSettings = async () => {
-        const settings = await window.electronAPI.store.get('settings')
-        if (!settings?.apiKey || !settings?.selectedModel) {
-          setError('请先配置 API Key 和模型')
-          return
-        }
-        setIsInitialized(true)
-      }
-      checkSettings()
-    }
-    setShowSettings(false)
-  }
-
-  // 保存分割区域大小
-  const handleDragEnd = (newSizes) => {
-    localStorage.setItem('split-sizes', JSON.stringify(newSizes))
-    setSizes(newSizes)
-  }
-
+  // 渲染组件的 JSX
   return (
     <div className="h-screen flex bg-zinc-900">
       {/* 导航栏 */}
