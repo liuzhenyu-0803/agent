@@ -1,11 +1,11 @@
 import { OpenRouterProvider } from './openrouter';
 import { GuijiProvider } from './guiji';
+import { ConfigurationError, ProviderError } from '../errors';
 
 class ProviderManager {
   constructor() {
     this.providers = new Map();
     this.activeProvider = null;
-    this.providerConfigs = new Map();
     
     // 注册内置的providers
     this.registerProvider(new OpenRouterProvider());
@@ -17,6 +17,9 @@ class ProviderManager {
    * @param {BaseProvider} provider 
    */
   registerProvider(provider) {
+    if (!provider.id || !provider.name) {
+      throw new ConfigurationError('Provider必须实现id和name属性');
+    }
     this.providers.set(provider.id, provider);
   }
 
@@ -39,7 +42,7 @@ class ProviderManager {
   getProviderConfigForm(providerId) {
     const provider = this.providers.get(providerId);
     if (!provider) {
-      throw new Error(`Provider ${providerId} not found`);
+      throw new ProviderError(`Provider不存在: ${providerId}`);
     }
     return provider.getConfigForm();
   }
@@ -52,22 +55,18 @@ class ProviderManager {
   async setProviderConfig(providerId, config) {
     const provider = this.providers.get(providerId);
     if (!provider) {
-      throw new Error(`Provider ${providerId} not found`);
+      throw new ProviderError(`Provider不存在: ${providerId}`);
     }
 
     // 创建新的provider实例并验证配置
     const newProvider = new provider.constructor(config);
-    const isValid = await newProvider.validateConfig();
-    if (!isValid) {
-      throw new Error(`Invalid configuration for provider ${providerId}`);
-    }
+    await newProvider.validateConfig();
 
-    // 保存配置
-    this.providerConfigs.set(providerId, config);
+    // 配置验证成功后，更新Provider
     this.providers.set(providerId, newProvider);
 
-    // 如果这是当前活动的provider，更新它
-    if (this.activeProvider?.id === providerId) {
+    // 如果这是唯一的Provider或者当前没有活动的Provider，将其设置为活动Provider
+    if (!this.activeProvider || this.providers.size === 1) {
       this.activeProvider = newProvider;
     }
   }
@@ -79,14 +78,8 @@ class ProviderManager {
   async setActiveProvider(providerId) {
     const provider = this.providers.get(providerId);
     if (!provider) {
-      throw new Error(`Provider ${providerId} not found`);
+      throw new ProviderError(`Provider不存在: ${providerId}`);
     }
-
-    const config = this.providerConfigs.get(providerId);
-    if (!config) {
-      throw new Error(`Provider ${providerId} not configured`);
-    }
-
     this.activeProvider = provider;
   }
 
@@ -96,7 +89,7 @@ class ProviderManager {
    */
   getActiveProvider() {
     if (!this.activeProvider) {
-      throw new Error('No active provider set');
+      throw new ProviderError('没有活动的Provider');
     }
     return this.activeProvider;
   }
@@ -109,7 +102,7 @@ class ProviderManager {
   async getProviderModels(providerId) {
     const provider = this.providers.get(providerId);
     if (!provider) {
-      throw new Error(`Provider ${providerId} not found`);
+      throw new ProviderError(`Provider不存在: ${providerId}`);
     }
     return provider.getAvailableModels();
   }
@@ -122,7 +115,7 @@ class ProviderManager {
    */
   async sendMessage(messages, options, onChunk) {
     if (!this.activeProvider) {
-      throw new Error('No active provider set');
+      throw new ProviderError('没有活动的Provider');
     }
     return this.activeProvider.sendMessageStream(messages, options, onChunk);
   }

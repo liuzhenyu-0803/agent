@@ -1,4 +1,5 @@
 import { BaseProvider } from './base';
+import { APIError, ConfigurationError } from '../errors';
 
 export class GuijiProvider extends BaseProvider {
   constructor(config) {
@@ -29,25 +30,18 @@ export class GuijiProvider extends BaseProvider {
   }
 
   async getAvailableModels() {
-    if (!this.config.apiKey) {
-      throw new Error('API Key not set');
-    }
-
     try {
       const response = await fetch(`${this.baseUrl}/models`, {
-        method: 'GET',
         headers: {
-          'Authorization': `Bearer ${this.config.apiKey}`,
-          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.config.apiKey}`
         }
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw this.handleError(response);
       }
 
       const data = await response.json();
-      // 这里的数据结构需要根据硅基流动的API实际返回格式进行调整
       return data.models.map(model => ({
         id: model.id,
         name: model.name || model.id,
@@ -55,22 +49,20 @@ export class GuijiProvider extends BaseProvider {
         price: model.price || 0
       }));
     } catch (error) {
-      console.error('Error fetching models:', error);
-      throw error;
+      throw this.handleError(error);
     }
   }
 
   async sendMessageStream(messages, options = {}, onChunk) {
-    if (!this.config.apiKey || !options.model) {
-      throw new Error('API Key or Model not set');
-    }
-
     try {
+      this.validateMessages(messages);
+      this.validateOptions(options);
+
       const response = await fetch(`${this.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.config.apiKey}`,
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.config.apiKey}`
         },
         body: JSON.stringify({
           model: options.model,
@@ -82,51 +74,39 @@ export class GuijiProvider extends BaseProvider {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        try {
-          const errorData = JSON.parse(errorText);
-          throw new Error(errorData.error?.message || `HTTP error! status: ${response.status}`);
-        } catch (e) {
-          throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
-        }
+        throw this.handleError(response);
+      }
+
+      if (!response.body) {
+        throw new APIError('返回的响应流无效');
       }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = '';
 
-      try {
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-          const chunk = decoder.decode(value, { stream: true });
-          buffer += chunk;
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
 
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (!line.trim() || line.trim() === 'data: [DONE]') continue;
+          if (!line.startsWith('data: ')) continue;
 
-          for (const line of lines) {
-            const trimmedLine = line.trim();
-            if (!trimmedLine || trimmedLine === 'data: [DONE]') continue;
-
-            if (trimmedLine.startsWith('data: ')) {
-              const jsonStr = trimmedLine.slice(6);
-              const data = JSON.parse(jsonStr);
-              // 这里的数据结构需要根据硅基流动的API实际返回格式进行调整
-              const content = data.choices?.[0]?.delta?.content;
-              if (content) {
-                onChunk(content);
-              }
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.choices?.[0]?.delta?.content) {
+              onChunk(data.choices[0].delta.content);
             }
+          } catch (error) {
+            console.warn('解析响应数据出错:', error);
           }
         }
-      } finally {
-        reader.releaseLock();
       }
     } catch (error) {
-      console.error('Error sending message:', error);
-      throw error;
+      throw this.handleError(error);
     }
   }
 
@@ -151,5 +131,41 @@ export class GuijiProvider extends BaseProvider {
         description: '选择服务区域'
       }
     ];
+  }
+
+  handleError(error) {
+    if (error instanceof Error && error.message.includes('Failed to fetch')) {
+      return new APIError('网络请求失败');
+    }
+
+    if (error instanceof Error && error.message.includes('Invalid API Key')) {
+      return new ConfigurationError('无效的API密钥');
+    }
+
+    return error;
+  }
+
+  validateMessages(messages) {
+    if (!Array.isArray(messages)) {
+      throw new Error('消息必须是一个数组');
+    }
+
+    if (messages.length === 0) {
+      throw new Error('消息不能为空');
+    }
+  }
+
+  validateOptions(options) {
+    if (!options.model) {
+      throw new Error('模型不能为空');
+    }
+
+    if (options.temperature < 0 || options.temperature > 1) {
+      throw new Error('温度必须在0到1之间');
+    }
+
+    if (options.maxTokens <= 0) {
+      throw new Error('最大令牌数必须大于0');
+    }
   }
 }

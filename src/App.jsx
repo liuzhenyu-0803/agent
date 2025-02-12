@@ -23,6 +23,9 @@ import Settings from './components/Settings'
 // 提供消息发送、流式响应等功能
 import { apiService } from './services/api'
 
+// 错误处理模块
+import { errorHandler } from './services/errorHandler'
+
 // 分屏组件的样式文件
 // 定义分屏组件的基础样式和交互效果
 import './split.css'
@@ -153,173 +156,50 @@ function App() {
    * 5. 更新UI状态和持久化存储
    */
   const handleSendMessage = async () => {
-    // 验证消息内容，防止发送空消息
     if (!inputMessage.trim()) return;
 
-    // 创建用户消息对象
-    // id: 使用时间戳确保唯一性
-    // role: 标识消息发送者身份
-    // content: 消息实际内容
-    const userMessage = {
-      id: Date.now(),
-      role: 'user',
-      content: inputMessage
-    };
-
-    // 构建更新后的消息列表和聊天对象
-    // 1. 获取现有消息或创建空数组
-    // 2. 添加新的用户消息
-    // 3. 生成或使用现有的聊天ID
-    const updatedMessages = [...(selectedChat?.messages || []), userMessage];
-    const chatId = selectedChat?.id || Date.now();
-    const updatedChat = {
-      id: chatId,
-      // 如果是新聊天，使用消息前20个字符作为标题
-      // 否则保留现有标题
-      title: selectedChat?.title || inputMessage.slice(0, 20),
-      messages: updatedMessages
-    };
-
-    // 更新聊天列表状态
-    // 1. 新聊天：添加到列表开头
-    // 2. 已有聊天：更新现有聊天内容
-    if (!selectedChat) {
-      setChats(prevChats => [...prevChats, updatedChat]);
-    } else {
-      setChats(prevChats =>
-        prevChats.map(chat =>
-          chat.id === selectedChat.id ? updatedChat : chat
-        )
-      );
-    }
-    
-    // 更新UI状态
-    // 1. 选中当前聊天
-    // 2. 清空输入框
-    // 3. 显示等待AI响应的状态
-    setSelectedChat(updatedChat);
-    setInputMessage('');
-    setIsResponsePending(true);
-
     try {
-      // 重置错误状态，准备新的请求
+      setIsResponsePending(true);
       setError(null);
-      
-      // messageContent: 用于累积AI的响应内容
-      // aiMessageId: 为AI响应生成唯一ID（用户消息ID + 1）
-      let messageContent = '';
-      const aiMessageId = Date.now() + 1;
 
-      // 发送消息到AI服务并处理流式响应
-      // 1. 发送更新后的消息列表
-      // 2. 通过回调函数处理每个响应片段
-      const response = await apiService.sendMessageStream(
-        updatedMessages,
-        (partialResponse) => {
-          // 处理首次响应
-          // 1. 创建新的AI消息对象
-          // 2. 关闭等待状态
-          // 3. 将消息添加到聊天记录
-          if (messageContent === '') {
-            messageContent = partialResponse;
-            const aiMessage = {
-              id: aiMessageId,
-              role: 'assistant',
-              content: messageContent
-            };
-            
-            // 收到首次响应，关闭等待状态
-            setIsResponsePending(false);
-            
-            // 更新选中的聊天记录
-            // 1. 创建包含新AI消息的消息数组
-            // 2. 保持聊天对象的其他属性不变
-            setSelectedChat(prevChat => {
-              const newMessages = [...prevChat.messages, aiMessage];
-              return {
-                ...prevChat,
-                messages: newMessages
-              };
-            });
-            
-            setChats(prevChats =>
-              prevChats.map(chat =>
-                chat.id === chatId 
-                  ? {
-                      ...chat,
-                      messages: [...chat.messages, aiMessage]
-                    }
-                  : chat
-              )
-            );
-          } else {
-            // 处理流式响应，实时更新消息内容
-            messageContent += partialResponse;
-            
-            setSelectedChat(prevChat => {
-              const updatedMessages = prevChat.messages.map(msg =>
-                msg.id === aiMessageId
-                  ? { ...msg, content: messageContent }
-                  : msg
-              );
-              return {
-                ...prevChat,
-                messages: updatedMessages
-              };
-            });
+      // 添加用户消息到聊天列表
+      const userMessage = {
+        role: 'user',
+        content: inputMessage,
+        timestamp: new Date()
+      };
 
-            setChats(prevChats =>
-              prevChats.map(chat => {
-                if (chat.id === chatId) {
-                  const updatedMessages = chat.messages.map(msg =>
-                    msg.id === aiMessageId
-                      ? { ...msg, content: messageContent }
-                      : msg
-                  );
-                  return {
-                    ...chat,
-                    messages: updatedMessages
-                  };
-                }
-                return chat;
-              })
-            );
-          }
-        }
-      );
+      const updatedChats = [...chats, userMessage];
+      setChats(updatedChats);
+      setInputMessage('');
 
-      // 保存到本地存储
-      setChats(prevChats => {
-        const updatedChats = prevChats.map(chat => {
-          if (chat.id === chatId) {
-            const finalAiMessage = {
-              id: aiMessageId,
-              role: 'assistant',
-              content: messageContent
-            };
-            return {
-              ...chat,
-              messages: [...updatedMessages, finalAiMessage]
-            };
-          }
-          return chat;
-        });
-        window.electronAPI.store.set('chats', updatedChats);
-        return updatedChats;
+      // 发送消息并获取响应
+      let assistantMessage = {
+        role: 'assistant',
+        content: '',
+        timestamp: new Date()
+      };
+
+      setChats([...updatedChats, assistantMessage]);
+
+      await apiService.sendMessageStream(updatedChats, (chunk) => {
+        assistantMessage.content += chunk;
+        setChats([...updatedChats, { ...assistantMessage }]);
       });
 
-    } catch (err) {
-      setError(err.message);
-      // 发生错误时回退到之前的状态
-      setSelectedChat(updatedChat);
-      setChats(prevChats =>
-        prevChats.map(chat =>
-          chat.id === chatId ? updatedChat : chat
-        )
-      );
+      setIsResponsePending(false);
+    } catch (error) {
+      setError(errorHandler.getUserFriendlyMessage(error));
       setIsResponsePending(false);
     }
   };
+
+  // 错误提示组件
+  const ErrorMessage = ({ message }) => (
+    <div className="error-message bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-4">
+      <p className="text-red-500">{message}</p>
+    </div>
+  );
 
   // 处理按键事件，按下 Enter 键发送消息
   const handleKeyDown = (e) => {
@@ -501,9 +381,7 @@ function App() {
           {/* 输入区域 */}
           <div className="border-t border-zinc-800 p-4">
             {error && (
-              <div className="mb-4 p-3 bg-red-500/10 text-red-400 rounded-lg">
-                {error}
-              </div>
+              <ErrorMessage message={error} />
             )}
             <div className="flex gap-4">
               <textarea

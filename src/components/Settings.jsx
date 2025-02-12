@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { apiService } from '../services/api'
+import React, { useState, useEffect } from 'react';
+import { apiService } from '../services/api';
+import { errorHandler } from '../services/errors';
 
 function Settings({ onClose }) {
   // 状态管理
@@ -14,8 +15,15 @@ function Settings({ onClose }) {
 
   // 加载Provider列表
   useEffect(() => {
-    const providers = apiService.getAvailableProviders()
-    setProviders(providers)
+    try {
+      const availableProviders = apiService.getAvailableProviders()
+      setProviders(availableProviders)
+      if (availableProviders.length > 0) {
+        setSelectedProvider(availableProviders[0].id)
+      }
+    } catch (error) {
+      setError(errorHandler.getUserFriendlyMessage(error))
+    }
   }, [])
 
   // 加载已保存的设置
@@ -49,6 +57,22 @@ function Settings({ onClose }) {
     loadSettings()
   }, [])
 
+  // 加载Provider配置表单
+  useEffect(() => {
+    if (!selectedProvider) return;
+
+    try {
+      const form = apiService.getProviderConfigForm(selectedProvider)
+      setConfigForm(form)
+      // 重置配置值
+      setProviderConfig({})
+      setModels([])
+      setSelectedModel('')
+    } catch (error) {
+      setError(errorHandler.getUserFriendlyMessage(error))
+    }
+  }, [selectedProvider])
+
   // 加载模型列表
   const loadModels = async () => {
     setIsLoading(true)
@@ -65,46 +89,48 @@ function Settings({ onClose }) {
     }
   }
 
-  // 处理Provider变化
-  const handleProviderChange = async (providerId) => {
-    setSelectedProvider(providerId)
-    setProviderConfig({})
-    setSelectedModel('')
-    setModels([])
-    
-    if (providerId) {
-      const form = apiService.getProviderConfigForm(providerId)
-      setConfigForm(form)
-    } else {
-      setConfigForm([])
-    }
-  }
-
-  // 处理Provider配置变化
+  // 处理配置值变更
   const handleConfigChange = (key, value) => {
     setProviderConfig(prev => ({
       ...prev,
       [key]: value
     }))
-  }
+    setError('')
+  };
 
-  // 验证并加载模型
+  // 处理Provider切换
+  const handleProviderChange = (event) => {
+    setSelectedProvider(event.target.value)
+    setError('')
+  };
+
+  // 处理模型选择
+  const handleModelChange = (event) => {
+    setSelectedModel(event.target.value)
+    setError('')
+  };
+
+  // 验证配置并加载模型列表
   const handleValidateConfig = async () => {
-    setError(null)
     setIsLoading(true)
+    setError('')
     try {
       await apiService.setProviderConfig(selectedProvider, providerConfig)
       await loadModels()
     } catch (error) {
-      console.error('Error validating config:', error)
-      setError('配置验证失败: ' + error.message)
+      setError(errorHandler.getUserFriendlyMessage(error))
     } finally {
       setIsLoading(false)
     }
-  }
+  };
 
   // 保存设置
   const handleSave = async () => {
+    if (!selectedModel) {
+      setError('请选择一个模型')
+      return
+    }
+
     try {
       const settings = {
         provider: selectedProvider,
@@ -228,7 +254,7 @@ function Settings({ onClose }) {
             </label>
             <select
               value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
+              onChange={(e) => handleModelChange(e.target.value)}
               className="w-full bg-zinc-800/50 text-gray-200 border border-zinc-700 rounded-xl px-4 pr-10 py-2.5 focus:outline-none focus:ring-2 focus:ring-zinc-600 transition-all duration-200 appearance-none bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIiIGhlaWdodD0iOCIgdmlld0JveD0iMCAwIDEyIDgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ik0xIDFMNiA2TDExIDEiIHN0cm9rZT0iIzZCNzI4MCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KPC9zdmc+')] bg-no-repeat bg-[center_right_1rem]"
             >
               <option value="">选择模型</option>

@@ -5,8 +5,19 @@ import rehypeHighlight from 'rehype-highlight'
 import remarkParse from 'remark-parse'
 import remarkRehype from 'remark-rehype'
 import { unified } from 'unified'
+import { errorHandler } from '../services/errors';
 
-const MessageContent = ({ content }) => {
+const MessageContent = ({ content, error }) => {
+  if (error) {
+    return (
+      <div className="message-error">
+        <div className="error-content">
+          {errorHandler.getUserFriendlyMessage(error)}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="prose prose-sm dark:prose-invert">
       <ReactMarkdown

@@ -1,4 +1,5 @@
 import { BaseProvider } from './base';
+import { APIError, ConfigurationError } from '../errors';
 
 export class OpenRouterProvider extends BaseProvider {
   constructor(config) {
@@ -29,10 +30,6 @@ export class OpenRouterProvider extends BaseProvider {
   }
 
   async getAvailableModels() {
-    if (!this.config.apiKey) {
-      throw new Error('API Key not set');
-    }
-
     try {
       const response = await fetch(`${this.baseUrl}/models`, {
         method: 'GET',
@@ -43,7 +40,7 @@ export class OpenRouterProvider extends BaseProvider {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw this.handleError(response);
       }
 
       const data = await response.json();
@@ -54,17 +51,19 @@ export class OpenRouterProvider extends BaseProvider {
         price: model.pricing?.prompt || 0
       }));
     } catch (error) {
-      console.error('Error fetching models:', error);
-      throw error;
+      throw this.handleError(error);
     }
   }
 
   async sendMessageStream(messages, options = {}, onChunk) {
-    if (!this.config.apiKey || !options.model) {
-      throw new Error('API Key or Model not set');
-    }
-
     try {
+      this.validateMessages(messages);
+      this.validateOptions(options);
+
+      if (!this.config.apiKey || !options.model) {
+        throw new ConfigurationError('API Key or Model not set');
+      }
+
       const response = await fetch(`${this.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -82,13 +81,7 @@ export class OpenRouterProvider extends BaseProvider {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        try {
-          const errorData = JSON.parse(errorText);
-          throw new Error(errorData.error?.message || `HTTP error! status: ${response.status}`);
-        } catch (e) {
-          throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
-        }
+        throw this.handleError(response);
       }
 
       const reader = response.body.getReader();
@@ -124,8 +117,7 @@ export class OpenRouterProvider extends BaseProvider {
         reader.releaseLock();
       }
     } catch (error) {
-      console.error('Error sending message:', error);
-      throw error;
+      throw this.handleError(error);
     }
   }
 
@@ -139,5 +131,26 @@ export class OpenRouterProvider extends BaseProvider {
         description: '从 OpenRouter 获取的 API Key'
       }
     ];
+  }
+
+  handleError(error) {
+    if (error instanceof Response) {
+      const errorText = error.statusText || `HTTP error! status: ${error.status}`;
+      return new APIError(errorText);
+    } else {
+      return error;
+    }
+  }
+
+  validateMessages(messages) {
+    if (!Array.isArray(messages)) {
+      throw new ConfigurationError('Messages must be an array');
+    }
+  }
+
+  validateOptions(options) {
+    if (!options.model) {
+      throw new ConfigurationError('Model is required');
+    }
   }
 }
