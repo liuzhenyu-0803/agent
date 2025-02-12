@@ -2,36 +2,55 @@ import React, { useState, useEffect, useRef } from 'react'
 import { apiService } from '../services/api'
 
 function Settings({ onClose }) {
-  const [apiKey, setApiKey] = useState('')
+  // 状态管理
+  const [selectedProvider, setSelectedProvider] = useState('')
+  const [providerConfig, setProviderConfig] = useState({})
   const [selectedModel, setSelectedModel] = useState('')
   const [models, setModels] = useState([])
   const [error, setError] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [providers, setProviders] = useState([])
+  const [configForm, setConfigForm] = useState([])
+
+  // 加载Provider列表
+  useEffect(() => {
+    const providers = apiService.getAvailableProviders()
+    setProviders(providers)
+  }, [])
 
   // 加载已保存的设置
   useEffect(() => {
     const loadSettings = async () => {
       try {
         const settings = await window.electronAPI.store.get('settings')
-        if (settings?.apiKey) {
-          setApiKey(settings.apiKey)
-          apiService.setApiKey(settings.apiKey)
+        if (settings?.provider) {
+          setSelectedProvider(settings.provider)
+          setProviderConfig(settings.providerConfig || {})
+          
+          // 加载Provider的配置表单
+          const form = apiService.getProviderConfigForm(settings.provider)
+          setConfigForm(form)
+
+          // 设置Provider配置
+          await apiService.setProviderConfig(settings.provider, settings.providerConfig)
+          
           // 加载模型列表
-          await loadModels(settings.apiKey)
+          await loadModels()
+          
           if (settings?.selectedModel) {
             setSelectedModel(settings.selectedModel)
           }
         }
       } catch (error) {
         console.error('Error loading settings:', error)
-        setError('加载设置时出错')
+        setError('加载设置时出错: ' + error.message)
       }
     }
     loadSettings()
   }, [])
 
   // 加载模型列表
-  const loadModels = async (key) => {
+  const loadModels = async () => {
     setIsLoading(true)
     setError(null)
     try {
@@ -40,22 +59,47 @@ function Settings({ onClose }) {
       setModels(availableModels)
     } catch (error) {
       console.error('Error loading models:', error)
-      setError('加载模型列表失败')
+      setError('加载模型列表失败: ' + error.message)
     } finally {
       setIsLoading(false)
     }
   }
 
-  // 处理 API Key 变化
-  const handleApiKeyChange = (e) => {
-    const newApiKey = e.target.value
-    setApiKey(newApiKey)
-    if (newApiKey.length > 0) {
-      apiService.setApiKey(newApiKey)
-      loadModels(newApiKey)
+  // 处理Provider变化
+  const handleProviderChange = async (providerId) => {
+    setSelectedProvider(providerId)
+    setProviderConfig({})
+    setSelectedModel('')
+    setModels([])
+    
+    if (providerId) {
+      const form = apiService.getProviderConfigForm(providerId)
+      setConfigForm(form)
     } else {
-      setModels([])
-      setSelectedModel('')
+      setConfigForm([])
+    }
+  }
+
+  // 处理Provider配置变化
+  const handleConfigChange = (key, value) => {
+    setProviderConfig(prev => ({
+      ...prev,
+      [key]: value
+    }))
+  }
+
+  // 验证并加载模型
+  const handleValidateConfig = async () => {
+    setError(null)
+    setIsLoading(true)
+    try {
+      await apiService.setProviderConfig(selectedProvider, providerConfig)
+      await loadModels()
+    } catch (error) {
+      console.error('Error validating config:', error)
+      setError('配置验证失败: ' + error.message)
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -63,32 +107,23 @@ function Settings({ onClose }) {
   const handleSave = async () => {
     try {
       const settings = {
-        apiKey,
+        provider: selectedProvider,
+        providerConfig,
         selectedModel
       }
       console.log('Saving settings:', settings)
       await window.electronAPI.store.set('settings', settings)
-      apiService.setApiKey(apiKey)
+      
+      // 设置Provider配置
+      await apiService.setProviderConfig(selectedProvider, providerConfig)
       apiService.setModel(selectedModel)
+      
       onClose()
     } catch (error) {
       console.error('Error saving settings:', error)
-      setError('保存设置时出错')
+      setError('保存设置时出错: ' + error.message)
     }
   }
-
-  const [isOpen, setIsOpen] = useState(false)
-  const dropdownRef = useRef(null)
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
 
   return (
     <div className="settings-panel">
@@ -111,41 +146,100 @@ function Settings({ onClose }) {
       )}
 
       <div className="space-y-6">
-        {/* API Key 输入框 */}
+        {/* Provider 选择 */}
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-1.5">
-            API Key
-          </label>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            className="w-full bg-zinc-800/50 text-gray-200 border border-zinc-700 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-zinc-600 transition-all duration-200"
-            placeholder="输入你的 API Key"
-          />
-        </div>
-
-        {/* 模型选择 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1.5">
-            选择模型
+            选择服务提供商
           </label>
           <select
-            value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
+            value={selectedProvider}
+            onChange={(e) => handleProviderChange(e.target.value)}
             className="w-full bg-zinc-800/50 text-gray-200 border border-zinc-700 rounded-xl px-4 pr-10 py-2.5 focus:outline-none focus:ring-2 focus:ring-zinc-600 transition-all duration-200 appearance-none bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIiIGhlaWdodD0iOCIgdmlld0JveD0iMCAwIDEyIDgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ik0xIDFMNiA2TDExIDEiIHN0cm9rZT0iIzZCNzI4MCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KPC9zdmc+')] bg-no-repeat bg-[center_right_1rem]"
           >
-            <option value="">选择模型</option>
-            {models.map(model => (
-              <option 
-                key={model.id} 
-                value={model.id}
-              >
-                {model.id}
+            <option value="">选择服务提供商</option>
+            {providers.map(provider => (
+              <option key={provider.id} value={provider.id}>
+                {provider.name}
               </option>
             ))}
           </select>
         </div>
+
+        {/* Provider 配置表单 */}
+        {selectedProvider && configForm.map(field => (
+          <div key={field.key}>
+            <label className="block text-sm font-medium text-gray-300 mb-1.5">
+              {field.label}
+              {field.required && <span className="text-red-500 ml-1">*</span>}
+            </label>
+            {field.type === 'select' ? (
+              <select
+                value={providerConfig[field.key] || ''}
+                onChange={(e) => handleConfigChange(field.key, e.target.value)}
+                className="w-full bg-zinc-800/50 text-gray-200 border border-zinc-700 rounded-xl px-4 pr-10 py-2.5 focus:outline-none focus:ring-2 focus:ring-zinc-600 transition-all duration-200 appearance-none bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIiIGhlaWdodD0iOCIgdmlld0JveD0iMCAwIDEyIDgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ik0xIDFMNiA2TDExIDEiIHN0cm9rZT0iIzZCNzI4MCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KPC9zdmc+')] bg-no-repeat bg-[center_right_1rem]"
+              >
+                <option value="">请选择</option>
+                {field.options.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type={field.type}
+                value={providerConfig[field.key] || ''}
+                onChange={(e) => handleConfigChange(field.key, e.target.value)}
+                className="w-full bg-zinc-800/50 text-gray-200 border border-zinc-700 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-zinc-600 transition-all duration-200"
+                placeholder={field.description}
+              />
+            )}
+            {field.description && (
+              <p className="mt-1 text-sm text-gray-400">{field.description}</p>
+            )}
+          </div>
+        ))}
+
+        {/* 验证配置按钮 */}
+        {selectedProvider && (
+          <div>
+            <button
+              onClick={handleValidateConfig}
+              disabled={isLoading}
+              className="w-full px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-gray-200 rounded-xl transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2"
+            >
+              {isLoading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                  验证中...
+                </>
+              ) : (
+                '验证配置'
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* 模型选择 */}
+        {models.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1.5">
+              选择模型
+            </label>
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              className="w-full bg-zinc-800/50 text-gray-200 border border-zinc-700 rounded-xl px-4 pr-10 py-2.5 focus:outline-none focus:ring-2 focus:ring-zinc-600 transition-all duration-200 appearance-none bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIiIGhlaWdodD0iOCIgdmlld0JveD0iMCAwIDEyIDgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ik0xIDFMNiA2TDExIDEiIHN0cm9rZT0iIzZCNzI4MCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KPC9zdmc+')] bg-no-repeat bg-[center_right_1rem]"
+            >
+              <option value="">选择模型</option>
+              {models.map(model => (
+                <option key={model.id} value={model.id}>
+                  {model.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* 保存按钮 */}
         <div className="flex justify-end gap-3 mt-6">
@@ -157,7 +251,7 @@ function Settings({ onClose }) {
           </button>
           <button
             onClick={handleSave}
-            disabled={isLoading}
+            disabled={isLoading || !selectedProvider || !selectedModel}
             className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-gray-200 rounded-xl transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center gap-2"
           >
             {isLoading ? (
