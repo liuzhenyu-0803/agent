@@ -1,10 +1,7 @@
 // 引入 Electron 的上下文桥接和进程间渲染器模块
+// contextBridge: 安全地将 API 暴露给渲染进程
+// ipcRenderer: 渲染进程中用于进程间通信的模块
 const { contextBridge, ipcRenderer } = require('electron')
-
-// 打印进程信息
-console.log('当前进程类型:', process.type)
-console.log('是否为渲染进程:', process.type === 'renderer')
-console.log('是否为主进程:', process.type === 'browser')
 
 // 控制台日志，帮助调试预加载脚本的执行
 console.log('Preload script starting...')

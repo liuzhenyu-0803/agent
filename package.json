@@ -8,11 +8,12 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "electron:dev": "concurrently \"npm run dev\" \"wait-on tcp:5173 && electron .\"",
+    "electron:dev": "concurrently \"npm run dev\" \"electron .\"",
     "electron:build": "vite build && electron-builder"
   },
   "dependencies": {
     "electron-store": "^8.1.0",
+    "highlight.js": "^11.11.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-markdown": "^8.0.7",
@@ -29,7 +30,6 @@
     "concurrently": "^8.2.0",
     "electron": "^25.3.1",
     "electron-builder": "^24.6.3",
-    "vite": "^4.4.5",
-    "wait-on": "^7.0.1"
+    "vite": "^4.4.5"
   }
 }

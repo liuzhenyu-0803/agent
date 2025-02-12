@@ -282,6 +282,19 @@ function App() {
     }
   };
 
+  // 处理按键事件，按下 Enter 键发送消息
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  // 处理设置面板关闭
+  const handleSettingsClose = () => {
+    setShowSettings(false);
+  };
+
   // 渲染组件的 JSX
   return (
     <div className="h-screen flex bg-zinc-900">
